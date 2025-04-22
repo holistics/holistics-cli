@@ -4,23 +4,34 @@ The Holistics CLI tool provides a convenient command-line interface for interact
 
 ## Installation
 
+**Note**: If you're using MacOS 12x (Monterey), please see the section [How to run the code via Node](#how-to-run-the-code-via-node)
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/holistics/holistics-cli/refs/heads/master/install.sh | bash
 ```
+
 
 ## Usage
 
 Please refer to the [Holistics CLI Documentation](https://docs.holistics.io/docs/cli/) for more information.
 
 ## Development
-- The cli-app is a NodeJS app that wraps around @holistics/cli-core package
-- Its main responsibilities is to automatically download the latest version of the @holistics/cli-core - which contains the core logic of the CLI
-  - On initialization, it will download the built files of @holistics/cli-core from npm registry, store it in the `.cache/holistics`
-  - Then it execute the @holistics/cli-core logic which then handles commands like: auth, dbt, aml
+The Holistics CLI is built as a lightweight NodeJS wrapper around the `@holistics/cli-core` package, which contains the core functionality. The wrapper has two main responsibilities:
+
+1. Package Management
+   - On startup, it automatically downloads the latest version of `@holistics/cli-core` from the npm registry
+   - The package is cached locally in `.cache/holistics` for future use
+
+2. Command Execution 
+   - Once the core package is loaded, it invokes the `@holistics/cli-core` for the actual command execution
+   - This enables commands like:
+     - `auth`: Authentication and user management
+     - `dbt`: dbt project operations
+     - `aml`: Analytics Modeling Language features
 
 ## Deployment
 - The cli-app is bundled via bun 1.2.10. Executable files are in the Releases section.
-- It is possible to check out the code and run it locally using Node (see below)
+- It is possible to check out the code and run it via Node (see below)
 
 ## How to run the code via Node
 
