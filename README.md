@@ -29,7 +29,7 @@ The Holistics CLI is built as a lightweight NodeJS wrapper around the `@holistic
      - `dbt`: dbt project operations
      - `aml`: Analytics Modeling Language features
 
-## Deployment
+## How to run
 - The cli-app is bundled via bun 1.2.10. Executable files are in the Releases section.
 - It is possible to check out the code and run it via Node (see below)
 
