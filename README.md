@@ -36,7 +36,7 @@ The Holistics CLI is built as a lightweight NodeJS wrapper around the `@holistic
 ## How to run the code via Node
 Require to have NodeJS installed on your machine (version v18 or higher)
 
-**Installation**
+**Check out the code and install dependencies**
 ```bash
 git clone https://github.com/holistics/holistics-cli.git
 cd holistics-cli
