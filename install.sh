@@ -20,8 +20,20 @@ case "$ARCH" in
         ;;
 esac
 
-# Fetch the latest release version from GitHub API
-LATEST_RELEASE=$(curl -s https://api.github.com/repos/holistics/holistics-cli/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+# Check if version is provided via environment variable, otherwise fetch latest
+if [ -n "${HOLISTICS_VERSION:-}" ]; then
+    echo "Using pinned version: $HOLISTICS_VERSION"
+    LATEST_RELEASE="$HOLISTICS_VERSION"
+    # Add 'v' prefix if not present
+    if [[ ! "$LATEST_RELEASE" =~ ^v ]]; then
+        LATEST_RELEASE="v$LATEST_RELEASE"
+    fi
+else
+    echo "Fetching latest release..."
+    # Fetch the latest release version from GitHub API
+    LATEST_RELEASE=$(curl -s https://api.github.com/repos/holistics/holistics-cli/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+fi
+
 
 # Remove 'v' prefix if present
 VERSION=$(echo "$LATEST_RELEASE" | sed 's/^v//')
