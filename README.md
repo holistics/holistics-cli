@@ -39,11 +39,6 @@ npm i
 npm run cli --help
 ```
 
-## Installation (as a Node package)
-If you already have a NodeJS codebase, then using the CLI as a package would be more convenient.
-- First, add the package `@holistics/cli-core` and `commander` to your project
-- Refer to this code to import the `@holistics/cli-core` and load it into the `Command` of the `commander`: https://github.com/holistics/holistics-cli/blob/master/src/index.ts
-
 ## Release process
 - The cli-app is bundled via bun 1.2.10. Executable files are in the Releases section.
 
