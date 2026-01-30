@@ -41,4 +41,18 @@ npm run cli --help
 
 ## Release process
 - The cli-app is bundled via bun 1.2.10. Executable files are in the Releases section.
+- Releases are automatically built and published when a new tag is pushed (e.g., `git tag v1.0.0 && git push --tags`).
+
+### Building locally
+To build the CLI locally for all platforms, run:
+```bash
+./compile-builds.sh
+```
+
+**Requirements:**
+- [Bun](https://bun.sh/) 1.2.10 or later
+- [UPX](https://upx.github.io/) for binary compression
+  - macOS: `brew install upx`
+  - Ubuntu/Debian: `sudo apt-get install upx`
+  - Windows: Download from https://github.com/upx/upx/releases
 
