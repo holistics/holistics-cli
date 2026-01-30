@@ -51,8 +51,10 @@ To build the CLI locally for all platforms, run:
 
 **Requirements:**
 - [Bun](https://bun.sh/) 1.2.10 or later
-- [UPX](https://upx.github.io/) for binary compression
+- [UPX](https://upx.github.io/) for binary compression (optional but recommended)
   - macOS: `brew install upx`
   - Ubuntu/Debian: `sudo apt-get install upx`
-  - Windows: Download from https://github.com/upx/upx/releases
+  - Windows: `choco install upx`
+
+**Note:** The build script compresses the Bun runtime with UPX before compiling to reduce binary size. This is a [workaround](https://github.com/oven-sh/bun/issues/10051) since UPX cannot compress Bun-compiled binaries directly.
 
