@@ -41,7 +41,17 @@ trap 'rm -rf "$TEMP_DIR"' EXIT
 
 # Download the binary
 echo "Downloading Holistics CLI ${VERSION} for ${OS} ${ARCH}..."
+echo "Download URL: ${DOWNLOAD_URL}"
 curl -L -o "$TEMP_DIR/holistics-cli" "$DOWNLOAD_URL"
+
+echo ""
+# Log sha256 checksum
+if command -v sha256sum >/dev/null 2>&1; then
+    echo "SHA256: $(sha256sum "$TEMP_DIR/holistics-cli" | awk '{print $1}')"
+elif command -v shasum >/dev/null 2>&1; then
+    echo "SHA256: $(shasum -a 256 "$TEMP_DIR/holistics-cli" | awk '{print $1}')"
+fi
+echo ""
 
 # Make the binary executable
 chmod +x "$TEMP_DIR/holistics-cli"
