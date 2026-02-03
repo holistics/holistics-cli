@@ -19,7 +19,7 @@ jobs:
           - os: ubuntu-24.04-arm
             target: linux-arm64
             artifact: holistics-linux-arm64
-          - os: macos-13
+          - os: macos-14
             target: darwin-x64
             artifact: holistics-darwin-x64
           - os: macos-latest
@@ -64,19 +64,16 @@ jobs:
           echo "Compressing Bun runtime at $BUN_PATH"
           upx --best --lzma "$BUN_PATH" || echo "UPX compression of Bun runtime failed, continuing anyway"
 
-      - name: Compress Bun runtime with UPX (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $bunPath = (Get-Command bun).Source
-          Write-Host "Compressing Bun runtime at $bunPath"
-          upx --best --lzma $bunPath
-          if ($LASTEXITCODE -ne 0) { Write-Host "UPX compression of Bun runtime failed, continuing anyway" }
-
       - name: Build
         run: |
           mkdir -p release
           bun build src/index.ts --compile --outfile "release/${{ matrix.artifact }}" --minify --target "bun-${{ matrix.target }}"
+        shell: bash
+
+      - name: Compress output with UPX (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          upx --best --lzma "release/${{ matrix.artifact }}" || echo "UPX compression failed, continuing anyway"
         shell: bash
 
       - name: Upload artifact
