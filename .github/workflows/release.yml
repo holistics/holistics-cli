@@ -80,6 +80,12 @@ jobs:
           upx --best --lzma "release/${{ env.ARTIFACT_NAME }}" || echo "UPX compression failed, continuing anyway"
         shell: bash
 
+      - name: Test binary
+        run: |
+          ./release/${{ env.ARTIFACT_NAME }}
+          ./release/${{ env.ARTIFACT_NAME }} --version
+        shell: bash
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
