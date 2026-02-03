@@ -1,0 +1,108 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x64
+            artifact: holistics-linux-x64
+          - os: ubuntu-24.04-arm
+            target: linux-arm64
+            artifact: holistics-linux-arm64
+          - os: macos-13
+            target: darwin-x64
+            artifact: holistics-darwin-x64
+          - os: macos-latest
+            target: darwin-arm64
+            artifact: holistics-darwin-arm64
+          - os: windows-latest
+            target: windows-x64
+            artifact: holistics-windows-x64.exe
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.8
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Install UPX (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y upx
+
+      - name: Install UPX (macOS)
+        if: runner.os == 'macOS'
+        run: brew install upx
+
+      - name: Install UPX (Windows)
+        if: runner.os == 'Windows'
+        run: choco install upx
+
+      - name: Compress Bun runtime with UPX (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          BUN_PATH=$(which bun)
+          echo "Compressing Bun runtime at $BUN_PATH"
+          upx --best --lzma "$BUN_PATH" || echo "UPX compression of Bun runtime failed, continuing anyway"
+
+      - name: Compress Bun runtime with UPX (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $bunPath = (Get-Command bun).Source
+          Write-Host "Compressing Bun runtime at $bunPath"
+          upx --best --lzma $bunPath
+          if ($LASTEXITCODE -ne 0) { Write-Host "UPX compression of Bun runtime failed, continuing anyway" }
+
+      - name: Build
+        run: |
+          mkdir -p release
+          bun build src/index.ts --compile --outfile "release/${{ matrix.artifact }}" --minify --target "bun-${{ matrix.target }}"
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: release/${{ matrix.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: List release files
+        run: ls -la release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
