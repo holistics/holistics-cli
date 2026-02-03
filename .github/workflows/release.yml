@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - "v*"
-    branches:
-      - ci/update-installation-script
 
 permissions:
   contents: write
@@ -21,7 +19,7 @@ jobs:
           - os: ubuntu-24.04-arm
             target: linux-arm64
             artifact_suffix: linux-arm64
-          - os: macos-14
+          - os: macos-15-intel
             target: darwin-x64
             artifact_suffix: darwin-x64
           - os: macos-latest
@@ -34,7 +32,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     env:
-      VERSION: "test-v0.1.1"
+      VERSION: ${{ github.ref_name }}
 
     steps:
       - name: Checkout code
@@ -82,7 +80,7 @@ jobs:
 
       - name: Test binary
         run: |
-          ./release/${{ env.ARTIFACT_NAME }}
+          ./release/${{ env.ARTIFACT_NAME }} --help
           ./release/${{ env.ARTIFACT_NAME }} --version
         shell: bash
 
