@@ -1,8 +1,8 @@
-import { writeFile, mkdir, stat } from "fs/promises";
+import { writeFile, mkdir, stat, readdir } from "fs/promises";
 import { fetch } from "undici";
 import { extract } from "tar";
 import { join } from "path";
-import { getModulePath, ensureCacheDir } from "./cache";
+import { getCacheDir, getModulePath, ensureCacheDir } from "./cache";
 
 async function downloadAndExtract(pkg: string, version: string) {
   const modulePath = getModulePath(pkg, version);
@@ -24,18 +24,48 @@ async function downloadAndExtract(pkg: string, version: string) {
 }
 
 async function getLatestVersion(pkg: string): Promise<string> {
-  // console.log(`Fetching latest version of ${pkg}...`);
   const res = await fetch(`https://registry.npmjs.org/${pkg}`);
   if (!res.ok) throw new Error(`Failed to fetch package info: ${res.statusText}`);
-  
+
   const data = await res.json();
   const ver = data["dist-tags"]?.latest || "";
-  // console.log(`Latest version is ${ver}`);
   return ver;
 }
 
+async function findCachedVersion(pkg: string): Promise<string | null> {
+  const cacheDir = getCacheDir();
+  const prefix = `${pkg}@`;
+  try {
+    const entries = await readdir(cacheDir);
+    const matches = entries
+      .filter(e => e.startsWith(prefix))
+      .map(e => e.slice(prefix.length))
+      .sort()
+      .reverse();
+    return matches.length > 0 ? matches[0] : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function ensureModule(pkg: string, version?: string) {
-  if (!version) version = await getLatestVersion(pkg);
+  // Allow pinning the version via environment variable to skip npm registry calls entirely
+  if (!version) version = process.env.HOLISTICS_CLI_CORE_VERSION;
+
+  if (!version) {
+    try {
+      version = await getLatestVersion(pkg);
+    } catch (err) {
+      // Offline fallback: if npm is unreachable, try to use a cached version
+      const cached = await findCachedVersion(pkg);
+      if (cached) {
+        console.log(`Network unavailable, using cached version ${pkg}@${cached}`);
+        return getModulePath(pkg, cached);
+      }
+      throw err;
+    }
+  }
+
   const modulePath = getModulePath(pkg, version);
 
   try {
