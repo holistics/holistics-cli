@@ -1,0 +1,4 @@
+#!/bin/bash
+# Wrapper script to invoke holistics CLI
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec "${SCRIPT_DIR}/node_modules/.bin/tsx" "${SCRIPT_DIR}/src/index.ts" "$@"

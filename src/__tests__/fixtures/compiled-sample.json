@@ -1,0 +1,137 @@
+{
+  "models/orders.aml": {
+    "__type__": "TableModel",
+    "__fqn__": "orders",
+    "name": "orders",
+    "label": "Orders",
+    "data_source_name": "bigquery",
+    "table_name": "`project`.`schema`.`orders`",
+    "owner": "data@example.com",
+    "description": "Order transactions",
+    "dimension": {
+      "id": {
+        "label": "ID",
+        "type": "text",
+        "primary_key": true,
+        "definition": { "__type__": "Heredoc", "content": "{{ #SOURCE.id }}" }
+      },
+      "order_date": {
+        "label": "Order Date",
+        "type": "date",
+        "definition": { "__type__": "Heredoc", "content": "{{ #SOURCE.order_date }}" }
+      },
+      "customer_id": {
+        "label": "Customer ID",
+        "type": "text",
+        "definition": { "__type__": "Heredoc", "content": "{{ #SOURCE.customer_id }}" }
+      }
+    },
+    "measure": {
+      "total_amount": {
+        "label": "Total Amount",
+        "type": "number",
+        "aggregation_type": "sum",
+        "definition": { "__type__": "Heredoc", "content": "{{ #SOURCE.amount }}" }
+      },
+      "order_count": {
+        "label": "Order Count",
+        "type": "number",
+        "aggregation_type": "count"
+      }
+    }
+  },
+  "models/customers.aml": {
+    "__type__": "QueryModel",
+    "__fqn__": "customers",
+    "name": "customers",
+    "label": "Customers",
+    "data_source_name": "bigquery",
+    "owner": "data@example.com",
+    "query": { "__type__": "Heredoc", "content": "SELECT * FROM customers_raw" },
+    "dimension": {
+      "id": {
+        "label": "ID",
+        "type": "text",
+        "primary_key": true
+      },
+      "name": {
+        "label": "Name",
+        "type": "text"
+      },
+      "segment": {
+        "label": "Segment",
+        "type": "text"
+      }
+    },
+    "measure": {}
+  },
+  "datasets/ecommerce.aml": {
+    "__type__": "Dataset",
+    "__fqn__": "ecommerce",
+    "name": "ecommerce",
+    "label": "E-commerce Dataset",
+    "data_source_name": "bigquery",
+    "owner": "analytics@example.com",
+    "description": { "__type__": "Heredoc", "content": "Main ecommerce dataset" },
+    "models": [
+      { "name": "orders", "__fqn__": "orders" },
+      { "name": "customers", "__fqn__": "customers" }
+    ]
+  },
+  "dashboards/sales_overview.aml": {
+    "__type__": "Dashboard",
+    "__fqn__": "sales_overview",
+    "uname": "sales_overview",
+    "title": "Sales Overview",
+    "description": "Key sales metrics",
+    "owner": "product@example.com",
+    "block": {
+      "revenue_chart": {
+        "def": {
+          "__type__": "VizBlock",
+          "label": "Revenue Over Time",
+          "viz": {
+            "dataset": { "name": "ecommerce", "__fqn__": "ecommerce" },
+            "x_axis": {
+              "ref": { "__type__": "FieldRef", "model": "orders", "field": "order_date" }
+            },
+            "y_axis": [
+              {
+                "series": [
+                  {
+                    "field": {
+                      "ref": { "__type__": "FieldRef", "model": "orders", "field": "total_amount" }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "customer_segments": {
+        "def": {
+          "__type__": "VizBlock",
+          "label": "Customer Segments",
+          "viz": {
+            "dataset": { "name": "ecommerce", "__fqn__": "ecommerce" },
+            "x_axis": {
+              "ref": { "__type__": "FieldRef", "model": "customers", "field": "segment" }
+            },
+            "y_axis": [
+              {
+                "series": [
+                  {
+                    "field": {
+                      "ref": { "__type__": "FieldRef", "model": "orders", "field": "order_count" }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}
