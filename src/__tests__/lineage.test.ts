@@ -132,6 +132,24 @@ describe('transformToLineage', () => {
     });
   });
 
+  describe('lineage.chart_to_dataset', () => {
+    it('should map charts to their datasets', () => {
+      expect(lineage.lineage.chart_to_dataset.length).toBe(2);
+
+      const revenueEdge = lineage.lineage.chart_to_dataset.find(
+        e => e.chart === 'sales_overview.revenue_chart'
+      );
+      expect(revenueEdge).toBeDefined();
+      expect(revenueEdge!.dataset).toBe('ecommerce');
+
+      const segmentsEdge = lineage.lineage.chart_to_dataset.find(
+        e => e.chart === 'sales_overview.customer_segments'
+      );
+      expect(segmentsEdge).toBeDefined();
+      expect(segmentsEdge!.dataset).toBe('ecommerce');
+    });
+  });
+
   describe('lineage.chart_to_model', () => {
     it('should map charts to models via field refs', () => {
       expect(lineage.lineage.chart_to_model.length).toBe(2);

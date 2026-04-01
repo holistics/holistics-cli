@@ -94,6 +94,11 @@ interface ChartToModel {
   models: string[];
 }
 
+interface ChartToDataset {
+  chart: string;
+  dataset: string;
+}
+
 interface DashboardToChart {
   dashboard: string;
   charts: string[];
@@ -116,6 +121,7 @@ interface LineageOutput {
   lineage: {
     model_to_source: LineageEdge[];
     dataset_to_model: DatasetToModel[];
+    chart_to_dataset: ChartToDataset[];
     chart_to_model: ChartToModel[];
     dashboard_to_chart: DashboardToChart[];
   };
@@ -387,6 +393,13 @@ export function transformToLineage(compiledData: Record<string, any>, projectPat
     models: d.models,
   }));
 
+  const chartToDataset: ChartToDataset[] = charts
+    .filter(c => c.dataset)
+    .map(c => ({
+      chart: c.fqn,
+      dataset: c.dataset!,
+    }));
+
   const chartToModel: ChartToModel[] = charts
     .filter(c => c.models_used.length > 0)
     .map(c => ({
@@ -420,6 +433,7 @@ export function transformToLineage(compiledData: Record<string, any>, projectPat
     lineage: {
       model_to_source: modelToSource,
       dataset_to_model: datasetToModel,
+      chart_to_dataset: chartToDataset,
       chart_to_model: chartToModel,
       dashboard_to_chart: dashboardToChart,
     },

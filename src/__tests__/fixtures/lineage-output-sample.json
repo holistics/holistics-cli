@@ -1,0 +1,247 @@
+{
+  "version": "1.0",
+  "generated_at": "2026-04-01T10:00:00.000Z",
+  "project": {
+    "name": "project",
+    "path": "/example/project"
+  },
+  "entities": {
+    "data_sources": [
+      "bigquery"
+    ],
+    "models": [
+      {
+        "fqn": "orders",
+        "name": "orders",
+        "label": "Orders",
+        "type": "TableModel",
+        "description": "Order transactions",
+        "data_source": "bigquery",
+        "owner": "data@example.com",
+        "fields": [
+          {
+            "name": "id",
+            "label": "ID",
+            "type": "text",
+            "is_dimension": true,
+            "is_measure": false,
+            "is_primary_key": true,
+            "definition": "{{ #SOURCE.id }}"
+          },
+          {
+            "name": "order_date",
+            "label": "Order Date",
+            "type": "date",
+            "is_dimension": true,
+            "is_measure": false,
+            "is_primary_key": false,
+            "definition": "{{ #SOURCE.order_date }}"
+          },
+          {
+            "name": "customer_id",
+            "label": "Customer ID",
+            "type": "text",
+            "is_dimension": true,
+            "is_measure": false,
+            "is_primary_key": false,
+            "definition": "{{ #SOURCE.customer_id }}"
+          },
+          {
+            "name": "total_amount",
+            "label": "Total Amount",
+            "type": "number",
+            "is_dimension": false,
+            "is_measure": true,
+            "is_primary_key": false,
+            "definition": "{{ #SOURCE.amount }}",
+            "aggregation": "sum"
+          },
+          {
+            "name": "order_count",
+            "label": "Order Count",
+            "type": "number",
+            "is_dimension": false,
+            "is_measure": true,
+            "is_primary_key": false,
+            "aggregation": "count"
+          }
+        ],
+        "file_path": "models/orders.aml",
+        "source_table": {
+          "database": "project",
+          "schema": "schema",
+          "table": "orders",
+          "full_name": "`project`.`schema`.`orders`"
+        }
+      },
+      {
+        "fqn": "customers",
+        "name": "customers",
+        "label": "Customers",
+        "type": "QueryModel",
+        "data_source": "bigquery",
+        "owner": "data@example.com",
+        "fields": [
+          {
+            "name": "id",
+            "label": "ID",
+            "type": "text",
+            "is_dimension": true,
+            "is_measure": false,
+            "is_primary_key": true
+          },
+          {
+            "name": "name",
+            "label": "Name",
+            "type": "text",
+            "is_dimension": true,
+            "is_measure": false,
+            "is_primary_key": false
+          },
+          {
+            "name": "segment",
+            "label": "Segment",
+            "type": "text",
+            "is_dimension": true,
+            "is_measure": false,
+            "is_primary_key": false
+          }
+        ],
+        "file_path": "models/customers.aml",
+        "query": "SELECT * FROM customers_raw"
+      }
+    ],
+    "datasets": [
+      {
+        "fqn": "ecommerce",
+        "name": "ecommerce",
+        "label": "E-commerce Dataset",
+        "description": "Main ecommerce dataset",
+        "data_source": "bigquery",
+        "owner": "analytics@example.com",
+        "models": [
+          "orders",
+          "customers"
+        ],
+        "file_path": "datasets/ecommerce.aml"
+      }
+    ],
+    "dashboards": [
+      {
+        "fqn": "sales_overview",
+        "name": "sales_overview",
+        "title": "Sales Overview",
+        "description": "Key sales metrics",
+        "owner": "product@example.com",
+        "charts": [
+          "sales_overview.revenue_chart",
+          "sales_overview.customer_segments"
+        ],
+        "file_path": "dashboards/sales_overview.aml"
+      }
+    ],
+    "charts": [
+      {
+        "fqn": "sales_overview.revenue_chart",
+        "name": "revenue_chart",
+        "label": "Revenue Over Time",
+        "type": "VizBlock",
+        "dashboard": "sales_overview",
+        "dataset": "ecommerce",
+        "models_used": [
+          "orders"
+        ],
+        "fields_used": [
+          {
+            "model": "orders",
+            "field": "order_date"
+          },
+          {
+            "model": "orders",
+            "field": "total_amount"
+          }
+        ]
+      },
+      {
+        "fqn": "sales_overview.customer_segments",
+        "name": "customer_segments",
+        "label": "Customer Segments",
+        "type": "VizBlock",
+        "dashboard": "sales_overview",
+        "dataset": "ecommerce",
+        "models_used": [
+          "customers",
+          "orders"
+        ],
+        "fields_used": [
+          {
+            "model": "customers",
+            "field": "segment"
+          },
+          {
+            "model": "orders",
+            "field": "order_count"
+          }
+        ]
+      }
+    ]
+  },
+  "lineage": {
+    "model_to_source": [
+      {
+        "model": "orders",
+        "source": {
+          "data_source": "bigquery",
+          "database": "project",
+          "schema": "schema",
+          "table": "orders"
+        }
+      }
+    ],
+    "dataset_to_model": [
+      {
+        "dataset": "ecommerce",
+        "models": [
+          "orders",
+          "customers"
+        ]
+      }
+    ],
+    "chart_to_dataset": [
+      {
+        "chart": "sales_overview.revenue_chart",
+        "dataset": "ecommerce"
+      },
+      {
+        "chart": "sales_overview.customer_segments",
+        "dataset": "ecommerce"
+      }
+    ],
+    "chart_to_model": [
+      {
+        "chart": "sales_overview.revenue_chart",
+        "dataset": "ecommerce",
+        "models": [
+          "orders"
+        ]
+      },
+      {
+        "chart": "sales_overview.customer_segments",
+        "dataset": "ecommerce",
+        "models": [
+          "customers",
+          "orders"
+        ]
+      }
+    ],
+    "dashboard_to_chart": [
+      {
+        "dashboard": "sales_overview",
+        "charts": [
+          "sales_overview.revenue_chart",
+          "sales_overview.customer_segments"
+        ]
+      }
+    ]
+  }
+}
