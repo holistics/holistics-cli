@@ -11,7 +11,7 @@ export async function loadModule(pkg: string, version?: string) {
   // Support local development via environment variable
   if (pkg === '@holistics/cli-core' && process.env.CLI_CORE_PATH) {
     const localPath = process.env.CLI_CORE_PATH;
-    console.log(`[dev] Using local cli-core from: ${localPath}`);
+    console.error(`[dev] Using local cli-core from: ${localPath}`);
     return import(join(localPath, "dist/commands.js"));
   }
 

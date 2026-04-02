@@ -61,12 +61,20 @@ if (amlCommand) {
     .option('-o, --output <file>', 'Output file path (default: stdout)')
     .option('--entities <types>', 'Filter by entity types (comma-separated: models,datasets,dashboards,charts)')
     .option('--compact', 'Output compact JSON (no pretty printing)')
-    .action(async (path: string = '.', options: { output?: string; entities?: string; compact?: boolean }) => {
+    .option('--compiled <file>', 'Use pre-compiled JSON file instead of running compile')
+    .action(async (path: string = '.', options: { output?: string; entities?: string; compact?: boolean; compiled?: string }) => {
       try {
         const projectPath = resolve(path);
 
-        // Compile the AML project
-        const compiledData = await runCompile(projectPath);
+        // Load compiled data either from file or by running compile
+        let compiledData: Record<string, any>;
+        if (options.compiled) {
+          const { readFile } = await import('fs/promises');
+          const content = await readFile(resolve(options.compiled), 'utf-8');
+          compiledData = JSON.parse(content);
+        } else {
+          compiledData = await runCompile(projectPath);
+        }
 
         // Transform to lineage format (pass cli-core for AQL extraction)
         const lineage = transformToLineage(compiledData, projectPath, clicore);
