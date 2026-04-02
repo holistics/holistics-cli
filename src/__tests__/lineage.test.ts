@@ -67,6 +67,24 @@ describe('transformToLineage', () => {
       expect(ecommerce.label).toBe('E-commerce Dataset');
       expect(ecommerce.models).toEqual(['orders', 'customers']);
     });
+
+    it('should extract metrics with AQL references', () => {
+      const ecommerce = lineage.entities.datasets[0];
+      expect(ecommerce.metrics.length).toBe(2);
+
+      const ltvMetric = ecommerce.metrics.find(m => m.name === 'customer_ltv');
+      expect(ltvMetric).toBeDefined();
+      expect(ltvMetric!.label).toBe('Customer LTV');
+      expect(ltvMetric!.models_referenced).toContain('orders');
+      expect(ltvMetric!.models_referenced).toContain('customers');
+      expect(ltvMetric!.fields_referenced).toContainEqual({ model: 'orders', field: 'total_amount' });
+      expect(ltvMetric!.fields_referenced).toContainEqual({ model: 'customers', field: 'id' });
+
+      const avgMetric = ecommerce.metrics.find(m => m.name === 'avg_order_value');
+      expect(avgMetric).toBeDefined();
+      expect(avgMetric!.models_referenced).toContain('orders');
+      expect(avgMetric!.fields_referenced).toContainEqual({ model: 'orders', field: 'total_amount' });
+    });
   });
 
   describe('entities.dashboards', () => {
@@ -76,13 +94,13 @@ describe('transformToLineage', () => {
       expect(dashboard.fqn).toBe('sales_overview');
       expect(dashboard.title).toBe('Sales Overview');
       expect(dashboard.owner).toBe('product@example.com');
-      expect(dashboard.charts.length).toBe(2);
+      expect(dashboard.charts.length).toBe(3);
     });
   });
 
   describe('entities.charts', () => {
     it('should parse charts with field references', () => {
-      expect(lineage.entities.charts.length).toBe(2);
+      expect(lineage.entities.charts.length).toBe(3);
 
       const revenueChart = lineage.entities.charts.find(c => c.name === 'revenue_chart');
       expect(revenueChart).toBeDefined();
@@ -90,14 +108,31 @@ describe('transformToLineage', () => {
       expect(revenueChart!.dashboard).toBe('sales_overview');
       expect(revenueChart!.dataset).toBe('ecommerce');
       expect(revenueChart!.models_used).toContain('orders');
-      expect(revenueChart!.fields_used).toContainEqual({ model: 'orders', field: 'order_date' });
-      expect(revenueChart!.fields_used).toContainEqual({ model: 'orders', field: 'total_amount' });
+      expect(revenueChart!.fields_used).toContainEqual({ model: 'orders', field: 'order_date', source: 'field_ref' });
+      expect(revenueChart!.fields_used).toContainEqual({ model: 'orders', field: 'total_amount', source: 'field_ref' });
     });
 
     it('should track multiple models used in a chart', () => {
       const segmentsChart = lineage.entities.charts.find(c => c.name === 'customer_segments');
       expect(segmentsChart!.models_used).toContain('customers');
       expect(segmentsChart!.models_used).toContain('orders');
+    });
+
+    it('should extract model refs from AQL calculations in charts', () => {
+      const aqlChart = lineage.entities.charts.find(c => c.name === 'aql_calculation_chart');
+      expect(aqlChart).toBeDefined();
+
+      // Should have both field_ref and aql sources
+      expect(aqlChart!.fields_used.some(f => f.source === 'field_ref')).toBe(true);
+      expect(aqlChart!.fields_used.some(f => f.source === 'aql')).toBe(true);
+
+      // Should extract refs from AQL calculations
+      expect(aqlChart!.fields_used).toContainEqual({ model: 'orders', field: 'total_amount', source: 'aql' });
+      expect(aqlChart!.fields_used).toContainEqual({ model: 'customers', field: 'id', source: 'aql' });
+
+      // Should include both orders and customers in models_used
+      expect(aqlChart!.models_used).toContain('orders');
+      expect(aqlChart!.models_used).toContain('customers');
     });
   });
 
@@ -134,7 +169,7 @@ describe('transformToLineage', () => {
 
   describe('lineage.chart_to_dataset', () => {
     it('should map charts to their datasets', () => {
-      expect(lineage.lineage.chart_to_dataset.length).toBe(2);
+      expect(lineage.lineage.chart_to_dataset.length).toBe(3);
 
       const revenueEdge = lineage.lineage.chart_to_dataset.find(
         e => e.chart === 'sales_overview.revenue_chart'
@@ -152,7 +187,7 @@ describe('transformToLineage', () => {
 
   describe('lineage.chart_to_model', () => {
     it('should map charts to models via field refs', () => {
-      expect(lineage.lineage.chart_to_model.length).toBe(2);
+      expect(lineage.lineage.chart_to_model.length).toBe(3);
 
       const revenueEdge = lineage.lineage.chart_to_model.find(
         e => e.chart === 'sales_overview.revenue_chart'
@@ -175,6 +210,7 @@ describe('transformToLineage', () => {
       expect(edge.dashboard).toBe('sales_overview');
       expect(edge.charts).toContain('sales_overview.revenue_chart');
       expect(edge.charts).toContain('sales_overview.customer_segments');
+      expect(edge.charts).toContain('sales_overview.aql_calculation_chart');
     });
   });
 });

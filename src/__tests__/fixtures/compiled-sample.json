@@ -76,7 +76,19 @@
     "models": [
       { "name": "orders", "__fqn__": "orders" },
       { "name": "customers", "__fqn__": "customers" }
-    ]
+    ],
+    "metric": {
+      "customer_ltv": {
+        "label": "Customer LTV",
+        "type": "number",
+        "definition": { "__type__": "Heredoc", "content": "sum(orders.total_amount) / count_distinct(customers.id)" }
+      },
+      "avg_order_value": {
+        "label": "Average Order Value",
+        "type": "number",
+        "definition": { "__type__": "Heredoc", "content": "avg(orders.total_amount)" }
+      }
+    }
   },
   "dashboards/sales_overview.aml": {
     "__type__": "Dashboard",
@@ -129,6 +141,26 @@
                 ]
               }
             ]
+          }
+        }
+      },
+      "aql_calculation_chart": {
+        "def": {
+          "__type__": "VizBlock",
+          "label": "Chart with AQL Calculation",
+          "viz": {
+            "dataset": { "name": "ecommerce", "__fqn__": "ecommerce" },
+            "x_axis": {
+              "ref": { "__type__": "FieldRef", "model": "orders", "field": "order_date" }
+            },
+            "calculation": {
+              "revenue_per_customer": {
+                "formula": { "__type__": "Heredoc", "content": "sum(orders.total_amount) / count_distinct(customers.id)" }
+              },
+              "high_value_orders": {
+                "formula": { "__type__": "Heredoc", "content": "count(case(when: orders.total_amount > 100, then: 1, else: null))" }
+              }
+            }
           }
         }
       }

@@ -41,6 +41,14 @@ interface Model {
   file_path: string;
 }
 
+interface DatasetMetric {
+  name: string;
+  label?: string;
+  type?: string;
+  models_referenced: string[];
+  fields_referenced: Array<{ model: string; field: string }>;
+}
+
 interface Dataset {
   fqn: string;
   name: string;
@@ -49,7 +57,14 @@ interface Dataset {
   data_source: string;
   owner?: string;
   models: string[];
+  metrics: DatasetMetric[];
   file_path: string;
+}
+
+interface FieldReference {
+  model: string;
+  field: string;
+  source: 'field_ref' | 'aql';
 }
 
 interface Chart {
@@ -60,7 +75,7 @@ interface Chart {
   dashboard: string;
   dataset?: string;
   models_used: string[];
-  fields_used: Array<{ model: string; field: string }>;
+  fields_used: FieldReference[];
 }
 
 interface Dashboard {
@@ -235,6 +250,81 @@ function parseModel(filePath: string, data: any): Model | null {
   return model;
 }
 
+// AQL reserved words and functions to filter out from model.field extraction
+const AQL_RESERVED_WORDS = new Set([
+  // SQL keywords that might appear as prefix
+  'and', 'or', 'not', 'is', 'in', 'as', 'by', 'on', 'to', 'of',
+  'null', 'true', 'false', 'case', 'when', 'then', 'else', 'end',
+  // Common AQL functions
+  'sum', 'count', 'avg', 'min', 'max', 'count_distinct',
+  'date_diff', 'date_add', 'date_trunc', 'datetrunc', 'datediff',
+  'concat', 'coalesce', 'if', 'ifnull', 'nullif',
+  'abs', 'round', 'floor', 'ceil', 'power', 'sqrt',
+  'lower', 'upper', 'trim', 'length', 'substring', 'replace',
+  'year', 'month', 'day', 'hour', 'minute', 'second', 'week',
+  'now', 'today', 'current_date', 'current_timestamp',
+  // AQL-specific
+  'where', 'group', 'order', 'limit', 'offset', 'having',
+  'asc', 'desc', 'distinct', 'all', 'any', 'exists',
+  'between', 'like', 'ilike', 'similar',
+  'cast', 'convert', 'extract',
+  'row_number', 'rank', 'dense_rank', 'over', 'partition',
+  'first_value', 'last_value', 'lag', 'lead', 'nth_value',
+  'running', 'cumulative',
+]);
+
+/**
+ * Extract model.field references from an AQL expression string.
+ * Uses regex to find patterns like `model_name.field_name`.
+ *
+ * @param aql - The AQL expression string
+ * @param knownModels - Optional set of known model names for validation
+ * @returns Array of {model, field} references
+ */
+function extractAqlModelRefs(
+  aql: string,
+  knownModels?: Set<string>
+): Array<{ model: string; field: string }> {
+  const refs: Array<{ model: string; field: string }> = [];
+
+  // Match patterns like: model_name.field_name
+  // - Must start with a letter or underscore
+  // - Can contain letters, numbers, underscores
+  // - Excludes patterns inside quotes or after ::
+  const pattern = /\b([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\b/g;
+
+  let match;
+  while ((match = pattern.exec(aql)) !== null) {
+    const [, model, field] = match;
+
+    // Skip if the "model" is a reserved word or function
+    if (AQL_RESERVED_WORDS.has(model.toLowerCase())) {
+      continue;
+    }
+
+    // Skip common false positives
+    if (model === 'SOURCE' || model === '#SOURCE') {
+      continue;
+    }
+
+    // If we have known models, validate against them
+    if (knownModels && !knownModels.has(model)) {
+      continue;
+    }
+
+    refs.push({ model, field });
+  }
+
+  // Deduplicate
+  const seen = new Set<string>();
+  return refs.filter(ref => {
+    const key = `${ref.model}.${ref.field}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 // Parse a dataset from compiled JSON
 function parseDataset(filePath: string, data: any): Dataset | null {
   if (data.__type__ !== 'Dataset') return null;
@@ -248,6 +338,40 @@ function parseDataset(filePath: string, data: any): Dataset | null {
     }
   }
 
+  // Create a set of known model names for AQL validation
+  const knownModels = new Set(modelNames.map(m => {
+    // Extract just the model name from FQN (last part after ::)
+    const parts = m.split('::');
+    return parts[parts.length - 1];
+  }));
+
+  // Parse metrics and extract their AQL references
+  const metrics: DatasetMetric[] = [];
+  if (data.metric && typeof data.metric === 'object') {
+    for (const [metricName, metricData] of Object.entries(data.metric)) {
+      if (!metricData || typeof metricData !== 'object') continue;
+
+      const metric = metricData as any;
+      const definition = metric.definition;
+      const aqlContent = getHeredocContent(definition);
+
+      let fieldsReferenced: Array<{ model: string; field: string }> = [];
+      if (aqlContent) {
+        fieldsReferenced = extractAqlModelRefs(aqlContent, knownModels);
+      }
+
+      const modelsReferenced = [...new Set(fieldsReferenced.map(f => f.model))];
+
+      metrics.push({
+        name: metricName,
+        label: metric.label,
+        type: metric.type,
+        models_referenced: modelsReferenced,
+        fields_referenced: fieldsReferenced,
+      });
+    }
+  }
+
   return {
     fqn: data.__fqn__ || data.name,
     name: data.name,
@@ -256,19 +380,31 @@ function parseDataset(filePath: string, data: any): Dataset | null {
     data_source: data.data_source_name || '',
     owner: data.owner,
     models: modelNames,
+    metrics,
     file_path: filePath,
   };
 }
 
-// Extract field references from a viz object recursively
-function extractFieldRefs(obj: any): Array<{ model: string; field: string }> {
-  const refs: Array<{ model: string; field: string }> = [];
+/**
+ * Extract AQL content from Heredoc objects recursively.
+ * Returns all AQL strings found in the object tree.
+ */
+function extractAqlStrings(obj: any): string[] {
+  const aqlStrings: string[] = [];
 
   function traverse(o: any) {
     if (!o || typeof o !== 'object') return;
 
-    if (o.__type__ === 'FieldRef' && o.model && o.field) {
-      refs.push({ model: o.model, field: o.field });
+    // Check for Heredoc with AQL content
+    if (o.__type__ === 'Heredoc' && typeof o.content === 'string') {
+      // Check if this is an AQL heredoc (parent context usually indicates this)
+      // For safety, we'll extract from all heredocs and filter later
+      aqlStrings.push(o.content);
+    }
+
+    // Check for AqlHeredoc type
+    if (o.__type__ === 'AqlHeredoc' && typeof o.content === 'string') {
+      aqlStrings.push(o.content);
     }
 
     if (Array.isArray(o)) {
@@ -279,7 +415,50 @@ function extractFieldRefs(obj: any): Array<{ model: string; field: string }> {
   }
 
   traverse(obj);
-  return refs;
+  return aqlStrings;
+}
+
+// Extract field references from a viz object recursively
+function extractFieldRefs(obj: any, knownModels?: Set<string>): FieldReference[] {
+  const refs: FieldReference[] = [];
+
+  function traverse(o: any) {
+    if (!o || typeof o !== 'object') return;
+
+    // Extract explicit FieldRef objects
+    if (o.__type__ === 'FieldRef' && o.model && o.field) {
+      refs.push({ model: o.model, field: o.field, source: 'field_ref' });
+    }
+
+    if (Array.isArray(o)) {
+      for (const item of o) traverse(item);
+    } else {
+      for (const value of Object.values(o)) traverse(value);
+    }
+  }
+
+  traverse(obj);
+
+  // Also extract from AQL strings found in the object
+  const aqlStrings = extractAqlStrings(obj);
+  for (const aql of aqlStrings) {
+    const aqlRefs = extractAqlModelRefs(aql, knownModels);
+    for (const ref of aqlRefs) {
+      refs.push({ ...ref, source: 'aql' });
+    }
+  }
+
+  // Deduplicate, preferring field_ref over aql for same model.field
+  const seen = new Map<string, FieldReference>();
+  for (const ref of refs) {
+    const key = `${ref.model}.${ref.field}`;
+    const existing = seen.get(key);
+    if (!existing || (existing.source === 'aql' && ref.source === 'field_ref')) {
+      seen.set(key, ref);
+    }
+  }
+
+  return [...seen.values()];
 }
 
 // Parse a chart (viz block) from a dashboard
