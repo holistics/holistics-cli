@@ -7,6 +7,32 @@
 
 import { Command } from 'commander';
 
+// Type definitions for @holistics/cli-core AQL extraction utilities
+export interface AqlFieldReference {
+  model: string;
+  field: string;
+}
+
+export interface AqlExtractionResult {
+  models: string[];
+  fields: AqlFieldReference[];
+  errors?: string[];
+}
+
+export interface CliCoreModule {
+  registerCommands: (program: Command) => void;
+  // AQL extraction utilities (available in cli-core >= 0.6.19)
+  extractAqlReferences?: (
+    aqlExpression: string,
+    dataset: any,
+    options?: { adhocFields?: string[]; allowAmbiguousPaths?: boolean }
+  ) => AqlExtractionResult;
+  createDatasetFromCompiled?: (
+    compiledDataset: Record<string, any>,
+    dataSource?: any
+  ) => any;
+}
+
 // Types for the lineage output
 interface SourceTable {
   database?: string;
@@ -250,6 +276,54 @@ function parseModel(filePath: string, data: any): Model | null {
   return model;
 }
 
+/**
+ * Context for AQL extraction, passed through parsing functions.
+ * Contains the cli-core module (if available) and cached datasets.
+ */
+interface AqlExtractionContext {
+  clicore?: CliCoreModule;
+  datasetCache: Map<string, any>; // Cached converted datasets for type-checked extraction
+}
+
+/**
+ * Extract model.field references from AQL using type-checked extraction when available.
+ * Falls back to regex-based extraction if cli-core utilities aren't available or fail.
+ */
+function extractAqlRefsWithTypeChecker(
+  aql: string,
+  compiledDataset: any,
+  ctx: AqlExtractionContext,
+  knownModels?: Set<string>
+): Array<{ model: string; field: string }> {
+  // Try type-checked extraction if cli-core utilities are available
+  if (ctx.clicore?.extractAqlReferences && ctx.clicore?.createDatasetFromCompiled && compiledDataset) {
+    try {
+      // Get or create the Dataset object for type checking
+      let dataset = ctx.datasetCache.get(compiledDataset.__fqn__ || compiledDataset.name);
+      if (!dataset) {
+        dataset = ctx.clicore.createDatasetFromCompiled(compiledDataset);
+        ctx.datasetCache.set(compiledDataset.__fqn__ || compiledDataset.name, dataset);
+      }
+
+      const result = ctx.clicore.extractAqlReferences(aql, dataset);
+
+      // If no errors, use the type-checked result
+      if (!result.errors || result.errors.length === 0) {
+        return result.fields;
+      }
+
+      // If there were errors, log them and fall back to regex
+      console.error(`[lineage] AQL type-check warnings for "${aql.slice(0, 50)}...": ${result.errors.join(', ')}`);
+    } catch (error) {
+      // Type-checked extraction failed, fall back to regex
+      console.error(`[lineage] Type-checked AQL extraction failed, using regex fallback: ${error}`);
+    }
+  }
+
+  // Fall back to regex-based extraction
+  return extractAqlModelRefs(aql, knownModels);
+}
+
 // AQL reserved words and functions to filter out from model.field extraction
 const AQL_RESERVED_WORDS = new Set([
   // SQL keywords that might appear as prefix
@@ -326,7 +400,7 @@ function extractAqlModelRefs(
 }
 
 // Parse a dataset from compiled JSON
-function parseDataset(filePath: string, data: any): Dataset | null {
+function parseDataset(filePath: string, data: any, ctx: AqlExtractionContext): Dataset | null {
   if (data.__type__ !== 'Dataset') return null;
 
   const modelNames: string[] = [];
@@ -338,7 +412,7 @@ function parseDataset(filePath: string, data: any): Dataset | null {
     }
   }
 
-  // Create a set of known model names for AQL validation
+  // Create a set of known model names for AQL validation (fallback for regex)
   const knownModels = new Set(modelNames.map(m => {
     // Extract just the model name from FQN (last part after ::)
     const parts = m.split('::');
@@ -357,7 +431,8 @@ function parseDataset(filePath: string, data: any): Dataset | null {
 
       let fieldsReferenced: Array<{ model: string; field: string }> = [];
       if (aqlContent) {
-        fieldsReferenced = extractAqlModelRefs(aqlContent, knownModels);
+        // Use type-checked extraction when available
+        fieldsReferenced = extractAqlRefsWithTypeChecker(aqlContent, data, ctx, knownModels);
       }
 
       const modelsReferenced = [...new Set(fieldsReferenced.map(f => f.model))];
@@ -419,7 +494,12 @@ function extractAqlStrings(obj: any): string[] {
 }
 
 // Extract field references from a viz object recursively
-function extractFieldRefs(obj: any, knownModels?: Set<string>): FieldReference[] {
+function extractFieldRefs(
+  obj: any,
+  ctx: AqlExtractionContext,
+  compiledDataset?: any,
+  knownModels?: Set<string>
+): FieldReference[] {
   const refs: FieldReference[] = [];
 
   function traverse(o: any) {
@@ -442,7 +522,10 @@ function extractFieldRefs(obj: any, knownModels?: Set<string>): FieldReference[]
   // Also extract from AQL strings found in the object
   const aqlStrings = extractAqlStrings(obj);
   for (const aql of aqlStrings) {
-    const aqlRefs = extractAqlModelRefs(aql, knownModels);
+    // Use type-checked extraction when we have dataset context
+    const aqlRefs = compiledDataset
+      ? extractAqlRefsWithTypeChecker(aql, compiledDataset, ctx, knownModels)
+      : extractAqlModelRefs(aql, knownModels);
     for (const ref of aqlRefs) {
       refs.push({ ...ref, source: 'aql' });
     }
@@ -462,12 +545,22 @@ function extractFieldRefs(obj: any, knownModels?: Set<string>): FieldReference[]
 }
 
 // Parse a chart (viz block) from a dashboard
-function parseChart(dashboardFqn: string, blockName: string, blockData: any): Chart {
+function parseChart(
+  dashboardFqn: string,
+  blockName: string,
+  blockData: any,
+  ctx: AqlExtractionContext,
+  datasetLookup: Map<string, any>
+): Chart {
   const def = blockData.def || {};
   const viz = def.viz || {};
-  const dataset = viz.dataset || {};
+  const datasetRef = viz.dataset || {};
+  const datasetFqn = datasetRef.__fqn__ || datasetRef.name;
 
-  const fieldRefs = extractFieldRefs(viz);
+  // Get the compiled dataset for type-checked AQL extraction
+  const compiledDataset = datasetFqn ? datasetLookup.get(datasetFqn) : undefined;
+
+  const fieldRefs = extractFieldRefs(viz, ctx, compiledDataset);
   const modelsUsed = [...new Set(fieldRefs.map(r => r.model))];
 
   return {
@@ -476,14 +569,19 @@ function parseChart(dashboardFqn: string, blockName: string, blockData: any): Ch
     label: def.label || blockName,
     type: def.__type__ || 'VizBlock',
     dashboard: dashboardFqn,
-    dataset: dataset.__fqn__ || dataset.name,
+    dataset: datasetFqn,
     models_used: modelsUsed,
     fields_used: fieldRefs,
   };
 }
 
 // Parse a dashboard from compiled JSON
-function parseDashboard(filePath: string, data: any): { dashboard: Dashboard; charts: Chart[] } | null {
+function parseDashboard(
+  filePath: string,
+  data: any,
+  ctx: AqlExtractionContext,
+  datasetLookup: Map<string, any>
+): { dashboard: Dashboard; charts: Chart[] } | null {
   if (data.__type__ !== 'Dashboard') return null;
 
   const dashboardFqn = data.__fqn__ || data.uname;
@@ -492,7 +590,7 @@ function parseDashboard(filePath: string, data: any): { dashboard: Dashboard; ch
 
   if (data.block && typeof data.block === 'object') {
     for (const [blockName, blockData] of Object.entries(data.block)) {
-      const chart = parseChart(dashboardFqn, blockName, blockData);
+      const chart = parseChart(dashboardFqn, blockName, blockData, ctx, datasetLookup);
       charts.push(chart);
       chartFqns.push(chart.fqn);
     }
@@ -512,12 +610,31 @@ function parseDashboard(filePath: string, data: any): { dashboard: Dashboard; ch
 }
 
 // Main function to transform compiled JSON to lineage format
-export function transformToLineage(compiledData: Record<string, any>, projectPath: string): LineageOutput {
+export function transformToLineage(
+  compiledData: Record<string, any>,
+  projectPath: string,
+  clicore?: CliCoreModule
+): LineageOutput {
   const models: Model[] = [];
   const datasets: Dataset[] = [];
   const dashboards: Dashboard[] = [];
   const charts: Chart[] = [];
   const dataSources = new Set<string>();
+
+  // Create AQL extraction context
+  const ctx: AqlExtractionContext = {
+    clicore,
+    datasetCache: new Map(),
+  };
+
+  // Build a lookup map of compiled datasets for type-checked AQL extraction
+  const datasetLookup = new Map<string, any>();
+  for (const [, data] of Object.entries(compiledData)) {
+    if (data && typeof data === 'object' && data.__type__ === 'Dataset') {
+      const fqn = data.__fqn__ || data.name;
+      if (fqn) datasetLookup.set(fqn, data);
+    }
+  }
 
   // Parse all entities
   for (const [filePath, data] of Object.entries(compiledData)) {
@@ -540,13 +657,13 @@ export function transformToLineage(compiledData: Record<string, any>, projectPat
         if (model.data_source) dataSources.add(model.data_source);
       }
     } else if (entityType === 'Dataset') {
-      const dataset = parseDataset(filePath, data);
+      const dataset = parseDataset(filePath, data, ctx);
       if (dataset) {
         datasets.push(dataset);
         if (dataset.data_source) dataSources.add(dataset.data_source);
       }
     } else if (entityType === 'Dashboard') {
-      const result = parseDashboard(filePath, data);
+      const result = parseDashboard(filePath, data, ctx, datasetLookup);
       if (result) {
         dashboards.push(result.dashboard);
         charts.push(...result.charts);

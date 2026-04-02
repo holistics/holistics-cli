@@ -3,11 +3,11 @@ import { Command } from 'commander';
 import { spawn } from 'child_process';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { transformToLineage } from './lineage';
+import { transformToLineage, type CliCoreModule } from './lineage';
 
 const program = new Command();
 
-const clicore = await loadModule('@holistics/cli-core');
+const clicore: CliCoreModule = await loadModule('@holistics/cli-core');
 clicore.registerCommands(program);
 
 // Helper to run compile command and capture JSON output
@@ -68,8 +68,8 @@ if (amlCommand) {
         // Compile the AML project
         const compiledData = await runCompile(projectPath);
 
-        // Transform to lineage format
-        const lineage = transformToLineage(compiledData, projectPath);
+        // Transform to lineage format (pass cli-core for AQL extraction)
+        const lineage = transformToLineage(compiledData, projectPath, clicore);
 
         // Filter entities if requested
         if (options.entities) {
