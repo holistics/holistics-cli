@@ -1,4 +1,4 @@
-import { writeFile, mkdir, stat } from "fs/promises";
+import { writeFile, mkdir, stat, rm } from "fs/promises";
 import { fetch } from "undici";
 import { extract } from "tar";
 import { join } from "path";
@@ -13,14 +13,20 @@ async function downloadAndExtract(pkg: string, version: string) {
     ? `https://registry.npmjs.org/${pkg.replace("/", "%2F")}/-/${pkg.split("/")[1]}-${encodeURIComponent(version)}.tgz`
     : `https://registry.npmjs.org/${pkg}/-/${pkg}-${version}.tgz`;
 
-  console.log(`Downloading version ${pkg}@${version}...`);
-  const response = await fetch(tarballUrl);
-  if (!response.ok) throw new Error(`Failed to download package: ${response.statusText}`);
+  try {
+    console.log(`Downloading version ${pkg}@${version}...`);
+    const response = await fetch(tarballUrl);
+    if (!response.ok) throw new Error(`Failed to download package ${pkg}@${version}: ${response.statusText}`);
 
-  const tarball = await response.arrayBuffer();
-  await writeFile(join(modulePath, "package.tgz"), new Uint8Array(tarball)); // Now safe
+    const tarball = await response.arrayBuffer();
+    await writeFile(join(modulePath, "package.tgz"), new Uint8Array(tarball)); // Now safe
 
-  await extract({ file: join(modulePath, "package.tgz"), cwd: modulePath, strip: 1 });
+    await extract({ file: join(modulePath, "package.tgz"), cwd: modulePath, strip: 1 });
+  } catch (err) {
+    // Remove the partial download so the next run doesn't treat it as cached
+    await rm(modulePath, { recursive: true, force: true });
+    throw err;
+  }
 }
 
 async function getLatestVersion(pkg: string): Promise<string> {
