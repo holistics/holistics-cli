@@ -18,6 +18,10 @@ The Holistics CLI is built as a lightweight NodeJS wrapper around the `@holistic
 1. Package Management
    - On startup, it automatically downloads the latest version of `@holistics/cli-core` from the npm registry
    - The package is cached locally in `.cache/holistics` for future use
+   - To run a specific version instead of the latest, set the `HOLISTICS_CLI_CORE_VERSION` environment variable:
+     ```bash
+     HOLISTICS_CLI_CORE_VERSION=1.2.3 holistics --help
+     ```
 
 2. Command Execution 
    - Once the core package is loaded, it invokes the `@holistics/cli-core` for the actual command execution
