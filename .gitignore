@@ -176,3 +176,7 @@ dist
 
 # release
 release/
+
+# dev builds (build-dev.sh)
+.dev-build/
+release-dev/

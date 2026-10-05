@@ -62,3 +62,14 @@ To build the CLI locally for all platforms, run:
 
 **Note:** The build script compresses the Bun runtime with UPX before compiling to reduce binary size. This is a [workaround](https://github.com/oven-sh/bun/issues/10051) since UPX cannot compress Bun-compiled binaries directly.
 
+### Builidng the final binary with @holistics/cli-core
+
+In some cases, you develop a new feature in the core package and want to have a full binary built for testing,
+you can run this command, point to the core package directory and the target platform.
+
+```
+./build-dev.sh --core-dir <path>/packages/cli-core --target windows-x64
+```
+- For supported target, check `./build-dev.sh`
+
+This will create binaries in `./release-dev` directory.
