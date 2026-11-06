@@ -1,7 +1,7 @@
 {
   "name": "@holistics/cli-ts",
   "type": "module",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "scripts": {
     "cli": "tsx src/index.ts"
   },
